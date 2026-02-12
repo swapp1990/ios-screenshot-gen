@@ -5,6 +5,20 @@ CLI tool that generates App Store screenshots from any iOS project. Point it at 
 1. **Submission screenshots** — resized to exact App Store dimensions, ready for App Store Connect
 2. **Display screenshots** — marketing images with device frames, gradient backgrounds, and text overlays
 
+## Example Output (Quest Planner)
+
+<p align="center">
+  <img src="examples/submission-6.9inch.png" alt="Submission screenshot (6.9 inch, 1320x2868)" height="500" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="examples/display-hero.png" alt="Display screenshot with device frame and gradient" height="500" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="examples/display-custom-gradient.png" alt="Display screenshot with custom gradient and headline" height="500" />
+</p>
+
+<p align="center">
+  <em>Left: Submission (plain, 1320x2868) &nbsp;|&nbsp; Center: Display (auto-generated gradient) &nbsp;|&nbsp; Right: Display (custom config: purple-pink gradient + "Plan your quest" headline)</em>
+</p>
+
 ## Install
 
 ```bash
