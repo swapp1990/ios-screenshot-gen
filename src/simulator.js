@@ -181,7 +181,7 @@ function buildAndInstall(xcodeProject, scheme, deviceUdid, deviceName) {
     'xcodebuild',
     flag, `"${xcodeProject.path}"`,
     '-scheme', `"${scheme}"`,
-    '-configuration', 'Debug',
+    '-configuration', 'Release',
     `-destination 'platform=iOS Simulator,id=${deviceUdid}'`,
     `-derivedDataPath "${derivedData}"`,
     'build',
@@ -204,7 +204,7 @@ function buildAndInstall(xcodeProject, scheme, deviceUdid, deviceName) {
   }
 
   // Find the .app bundle
-  const productsDir = path.join(derivedData, 'Build', 'Products', 'Debug-iphonesimulator');
+  const productsDir = path.join(derivedData, 'Build', 'Products', 'Release-iphonesimulator');
   if (!fs.existsSync(productsDir)) {
     throw new Error(`Build products not found at ${productsDir}`);
   }
@@ -245,9 +245,10 @@ function launchApp(deviceUdid, bundleId) {
     throw new Error(`Failed to launch app: ${err.message}`);
   }
 
-  // Wait for app to settle (load UI)
+  // Wait for app to settle (load UI, render first frame)
+  // Release builds bundle JS so they need time to parse and render
   console.log('  Waiting for app to settle...');
-  spawnSync('sleep', ['3']);
+  spawnSync('sleep', ['6']);
 }
 
 /**
