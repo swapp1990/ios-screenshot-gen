@@ -1,58 +1,45 @@
 /**
  * Display screenshot compositor
  *
- * Generates polished marketing screenshots with:
- * - Device frames (rounded corners + metallic bezel)
- * - Gradient or solid color backgrounds
- * - Headline/subtext overlays with shadow
- *
- * Adapted from vacation-photos project compositor.
+ * Generates professional marketing screenshots with:
+ * - Floating device mockup with drop shadow (no thick bezel)
+ * - Rich gradient backgrounds with radial accent
+ * - Bold headline/subtext with generous spacing
+ * - Modern 2025/2026 App Store aesthetic
  */
 
 const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 
-// Display output dimensions (same as App Store submission sizes)
+// Display output dimensions
 const DISPLAY_DIMENSIONS = {
   '6.9inch': {
     width: 1320,
     height: 2868,
-    screenWidth: 1290,
-    screenHeight: 2796,
-    cornerRadius: 110,
+    // Device is scaled to ~72% of canvas width for breathing room
+    deviceScale: 0.72,
+    cornerRadius: 72, // Scaled corner radius for the smaller device
     name: 'iPhone 6.9"',
   },
   '6.5inch': {
     width: 1242,
     height: 2688,
-    screenWidth: 1218,
-    screenHeight: 2664,
-    cornerRadius: 100,
+    deviceScale: 0.72,
+    cornerRadius: 68,
     name: 'iPhone 6.5"',
   },
 };
 
-// Style presets for display screenshots
-const STYLE_PRESETS = {
-  'gradient-bold': {
-    backgroundType: 'gradient',
-    textPosition: 'top',
-    textColor: '#FFFFFF',
-  },
-  'dark-premium': {
-    backgroundType: 'solid',
-    backgroundColor: '#1A1A2E',
-    textPosition: 'top',
-    textColor: '#FFFFFF',
-  },
-  'minimal-light': {
-    backgroundType: 'solid',
-    backgroundColor: '#F8FAFC',
-    textPosition: 'top',
-    textColor: '#1E293B',
-  },
-};
+// Curated gradient palettes that work well for App Store screenshots
+const GRADIENT_PALETTES = [
+  ['#6366F1', '#8B5CF6', '#A78BFA'], // Indigo → Purple
+  ['#3B82F6', '#6366F1', '#8B5CF6'], // Blue → Indigo → Purple
+  ['#EC4899', '#8B5CF6', '#6366F1'], // Pink → Purple → Indigo
+  ['#F59E0B', '#EF4444', '#EC4899'], // Amber → Red → Pink
+  ['#10B981', '#06B6D4', '#3B82F6'], // Emerald → Cyan → Blue
+  ['#1E293B', '#334155', '#475569'], // Dark slate
+];
 
 /**
  * Convert hex color to RGBA object for sharp
@@ -65,7 +52,29 @@ function hexToRgba(hex) {
 }
 
 /**
- * Create gradient or solid background
+ * Lighten a hex color by a factor (0-1)
+ */
+function lightenColor(hex, factor) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const lighten = (c) => Math.min(255, Math.round(c + (255 - c) * factor));
+  return '#' + [lighten(r), lighten(g), lighten(b)].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Darken a hex color by a factor (0-1)
+ */
+function darkenColor(hex, factor) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const darken = (c) => Math.max(0, Math.round(c * (1 - factor)));
+  return '#' + [darken(r), darken(g), darken(b)].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Create rich gradient background with radial accent for depth
  */
 async function createBackground(width, height, background) {
   if (!background || background.type === 'solid') {
@@ -77,7 +86,6 @@ async function createBackground(width, height, background) {
       .toBuffer();
   }
 
-  // Gradient background
   const colors = background.colors || ['#6366F1', '#8B5CF6'];
   const angle = background.angle || 180;
 
@@ -87,30 +95,37 @@ async function createBackground(width, height, background) {
   else if (angle === 90) { x1 = '0%'; y1 = '0%'; x2 = '100%'; y2 = '0%'; }
   else if (angle === 135) { x1 = '0%'; y1 = '0%'; x2 = '100%'; y2 = '100%'; }
   else if (angle === 270) { x1 = '100%'; y1 = '0%'; x2 = '0%'; y2 = '0%'; }
-  // default: 180 (top to bottom)
 
-  // Support multiple gradient stops
-  let stops = '';
+  // Build gradient stops — if only 2 colors, add a middle stop for richness
+  let effectiveColors = colors;
   if (colors.length === 2) {
-    stops = `
-      <stop offset="0%" style="stop-color:${colors[0]};stop-opacity:1" />
-      <stop offset="100%" style="stop-color:${colors[1]};stop-opacity:1" />
-    `;
-  } else {
-    colors.forEach((c, i) => {
-      const offset = Math.round((i / (colors.length - 1)) * 100);
-      stops += `<stop offset="${offset}%" style="stop-color:${c};stop-opacity:1" />\n`;
-    });
+    // Derive a midpoint color by blending the two
+    const midColor = lightenColor(colors[0], 0.15);
+    effectiveColors = [colors[0], midColor, colors[1]];
   }
+
+  let stops = '';
+  effectiveColors.forEach((c, i) => {
+    const offset = Math.round((i / (effectiveColors.length - 1)) * 100);
+    stops += `<stop offset="${offset}%" style="stop-color:${c};stop-opacity:1" />\n`;
+  });
+
+  // Main linear gradient + radial accent glow for depth
+  const accentColor = lightenColor(effectiveColors[0], 0.3);
 
   const svgGradient = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="grad" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">
+        <linearGradient id="mainGrad" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">
           ${stops}
         </linearGradient>
+        <radialGradient id="accentGlow" cx="50%" cy="25%" r="60%" fx="50%" fy="25%">
+          <stop offset="0%" style="stop-color:${accentColor};stop-opacity:0.35" />
+          <stop offset="100%" style="stop-color:${accentColor};stop-opacity:0" />
+        </radialGradient>
       </defs>
-      <rect width="100%" height="100%" fill="url(#grad)"/>
+      <rect width="100%" height="100%" fill="url(#mainGrad)"/>
+      <rect width="100%" height="100%" fill="url(#accentGlow)"/>
     </svg>
   `;
 
@@ -118,73 +133,97 @@ async function createBackground(width, height, background) {
 }
 
 /**
- * Apply rounded corners to a screen image (device frame mask)
+ * Create the device mockup: rounded corners + thin subtle border + drop shadow
+ * Modern style — no thick dark bezel, just a clean floating device
  */
-async function createDeviceFrame(screenBuffer, screenWidth, screenHeight, cornerRadius) {
+async function createDeviceMockup(screenBuffer, deviceWidth, deviceHeight, cornerRadius) {
+  const borderWidth = 4; // Subtle thin border
+  const shadowPad = 60;  // Space for drop shadow
+  const totalWidth = deviceWidth + borderWidth * 2 + shadowPad * 2;
+  const totalHeight = deviceHeight + borderWidth * 2 + shadowPad * 2;
+
+  // 1. Resize screen to device dimensions
+  const resizedScreen = await sharp(screenBuffer)
+    .resize(deviceWidth, deviceHeight, { fit: 'cover', position: 'top' })
+    .png()
+    .toBuffer();
+
+  // 2. Apply rounded corner mask to screen
   const mask = Buffer.from(`
-    <svg width="${screenWidth}" height="${screenHeight}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="${screenWidth}" height="${screenHeight}" rx="${cornerRadius}" ry="${cornerRadius}" fill="white"/>
+    <svg width="${deviceWidth}" height="${deviceHeight}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="${deviceWidth}" height="${deviceHeight}"
+        rx="${cornerRadius}" ry="${cornerRadius}" fill="white"/>
     </svg>
   `);
 
-  const resizedScreen = await sharp(screenBuffer)
-    .resize(screenWidth, screenHeight, { fit: 'cover', position: 'top' })
-    .png()
-    .toBuffer();
-
-  return sharp(resizedScreen)
+  const maskedScreen = await sharp(resizedScreen)
     .composite([{ input: mask, blend: 'dest-in' }])
     .png()
     .toBuffer();
-}
 
-/**
- * Add metallic device bezel around the screen
- */
-async function addDeviceBezel(screenBuffer, width, height, cornerRadius) {
-  const bezelWidth = 12; // 4pt * 3 for @3x
-
-  const bezelSvg = `
-    <svg width="${width + bezelWidth * 2}" height="${height + bezelWidth * 2}" xmlns="http://www.w3.org/2000/svg">
+  // 3. Create the container with drop shadow
+  const containerSvg = `
+    <svg width="${totalWidth}" height="${totalHeight}" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="bezel" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#2D2D2D"/>
-          <stop offset="50%" style="stop-color:#1A1A1A"/>
-          <stop offset="100%" style="stop-color:#0D0D0D"/>
-        </linearGradient>
+        <filter id="deviceShadow" x="-20%" y="-10%" width="140%" height="130%">
+          <feDropShadow dx="0" dy="12" stdDeviation="28" flood-color="rgba(0,0,0,0.35)"/>
+        </filter>
       </defs>
-      <rect x="0" y="0" width="${width + bezelWidth * 2}" height="${height + bezelWidth * 2}"
-        rx="${cornerRadius + bezelWidth}" ry="${cornerRadius + bezelWidth}"
-        fill="url(#bezel)"/>
+      <!-- Thin border + shadow -->
+      <rect x="${shadowPad}" y="${shadowPad}"
+        width="${deviceWidth + borderWidth * 2}" height="${deviceHeight + borderWidth * 2}"
+        rx="${cornerRadius + borderWidth}" ry="${cornerRadius + borderWidth}"
+        fill="rgba(0,0,0,0.12)"
+        filter="url(#deviceShadow)"/>
+      <!-- Thin bright border (subtle edge) -->
+      <rect x="${shadowPad}" y="${shadowPad}"
+        width="${deviceWidth + borderWidth * 2}" height="${deviceHeight + borderWidth * 2}"
+        rx="${cornerRadius + borderWidth}" ry="${cornerRadius + borderWidth}"
+        fill="rgba(255,255,255,0.08)"
+        stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
     </svg>
   `;
 
-  const bezelBuffer = await sharp(Buffer.from(bezelSvg)).png().toBuffer();
+  const containerBuffer = await sharp(Buffer.from(containerSvg)).png().toBuffer();
 
-  return sharp(bezelBuffer)
-    .composite([{ input: screenBuffer, top: bezelWidth, left: bezelWidth }])
-    .png()
-    .toBuffer();
+  // 4. Composite screen onto container
+  return {
+    buffer: await sharp(containerBuffer)
+      .composite([{
+        input: maskedScreen,
+        top: shadowPad + borderWidth,
+        left: shadowPad + borderWidth,
+      }])
+      .png()
+      .toBuffer(),
+    totalWidth,
+    totalHeight,
+    shadowPad,
+    borderWidth,
+  };
 }
 
 /**
- * Add headline and subtext overlay
+ * Add headline and subtext overlay — modern bold typography
  */
-async function addTextOverlay(backgroundBuffer, headline, subtext, position, textColor, width, height) {
-  const headlineFontSize = 96; // 32pt at @3x
-  const subtextFontSize = 48;  // 16pt at @3x
-  const padding = 90;
+async function addTextOverlay(backgroundBuffer, headline, subtext, position, textColor, width, height, textAreaHeight) {
+  // Larger, bolder headline for impact
+  const headlineFontSize = 120; // 40pt at @3x — big and bold
+  const subtextFontSize = 54;   // 18pt at @3x
+  const padding = 100;
 
   let headlineY, subtextY;
   if (position === 'top') {
-    headlineY = padding + headlineFontSize;
-    subtextY = headlineY + subtextFontSize + 24;
+    // Center text in the text area above the device
+    const textBlockHeight = headlineFontSize + (subtext ? subtextFontSize + 30 : 0);
+    const startY = Math.round((textAreaHeight - textBlockHeight) / 2) + headlineFontSize * 0.8;
+    headlineY = Math.max(padding + headlineFontSize, startY);
+    subtextY = headlineY + subtextFontSize + 36;
   } else {
-    headlineY = height - padding - (subtext ? subtextFontSize + 36 : 0);
+    headlineY = height - padding - (subtext ? subtextFontSize + 42 : 0);
     subtextY = height - padding;
   }
 
-  // Escape XML special characters in text
   const escapeXml = (text) =>
     text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -195,7 +234,7 @@ async function addTextOverlay(backgroundBuffer, headline, subtext, position, tex
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <filter id="textShadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="rgba(0,0,0,0.3)"/>
+          <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="rgba(0,0,0,0.25)"/>
         </filter>
       </defs>
       <style>
@@ -204,15 +243,15 @@ async function addTextOverlay(backgroundBuffer, headline, subtext, position, tex
           font-weight: 800;
           font-size: ${headlineFontSize}px;
           fill: ${textColor};
-          letter-spacing: -0.02em;
+          letter-spacing: -0.03em;
         }
         .subtext {
           font-family: 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-          font-weight: 600;
+          font-weight: 500;
           font-size: ${subtextFontSize}px;
           fill: ${textColor};
-          opacity: 0.95;
-          letter-spacing: 0.02em;
+          opacity: 0.85;
+          letter-spacing: 0.01em;
         }
       </style>
       <text x="${width / 2}" y="${headlineY}" text-anchor="middle" class="headline" filter="url(#textShadow)">${safeHeadline}</text>
@@ -232,13 +271,13 @@ async function addTextOverlay(backgroundBuffer, headline, subtext, position, tex
  * Add a gradient overlay at the bottom for text readability
  */
 async function addBottomGradient(buffer, width, height) {
-  const gradientHeight = 400;
+  const gradientHeight = 500;
   const gradientSvg = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="bottomGrad" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" style="stop-color:rgba(0,0,0,0);stop-opacity:0" />
-          <stop offset="100%" style="stop-color:rgba(0,0,0,0.7);stop-opacity:1" />
+          <stop offset="100%" style="stop-color:rgba(0,0,0,0.65);stop-opacity:1" />
         </linearGradient>
       </defs>
       <rect x="0" y="${height - gradientHeight}" width="${width}" height="${gradientHeight}" fill="url(#bottomGrad)"/>
@@ -254,16 +293,6 @@ async function addBottomGradient(buffer, width, height) {
 
 /**
  * Generate a single display screenshot
- *
- * @param {string} screenshotPath - Path to raw simulator screenshot
- * @param {object} options
- * @param {string} options.headline - Marketing headline text
- * @param {string} [options.subtext] - Secondary text
- * @param {object} [options.background] - { type: 'gradient'|'solid', colors: [], color: '#hex' }
- * @param {string} [options.textPosition] - 'top' or 'bottom'
- * @param {string} [options.textColor] - '#FFFFFF'
- * @param {string} [options.size] - '6.9inch' or '6.5inch'
- * @param {string} options.outputPath - Where to save the result
  */
 async function generateDisplayScreenshot(screenshotPath, options) {
   const size = options.size || '6.9inch';
@@ -274,45 +303,54 @@ async function generateDisplayScreenshot(screenshotPath, options) {
   const textColor = options.textColor || '#FFFFFF';
   const background = options.background || { type: 'gradient', colors: ['#6366F1', '#8B5CF6'] };
 
-  // 1. Read and resize screen to device dimensions
+  // Calculate device dimensions (scaled down for breathing room)
+  const deviceWidth = Math.round(dim.width * dim.deviceScale);
+  const deviceHeight = Math.round(deviceWidth * (2796 / 1290)); // iPhone aspect ratio
+  // Cap height so device doesn't overflow canvas
+  const maxDeviceHeight = Math.round(dim.height * 0.78);
+  const finalDeviceHeight = Math.min(deviceHeight, maxDeviceHeight);
+
+  // 1. Read screen
   const screenBuffer = fs.readFileSync(screenshotPath);
 
-  // 2. Apply rounded corners
-  const framedScreen = await createDeviceFrame(screenBuffer, dim.screenWidth, dim.screenHeight, dim.cornerRadius);
+  // 2. Create floating device mockup (rounded corners + shadow, no thick bezel)
+  const device = await createDeviceMockup(screenBuffer, deviceWidth, finalDeviceHeight, dim.cornerRadius);
 
-  // 3. Add device bezel
-  const deviceBuffer = await addDeviceBezel(framedScreen, dim.screenWidth, dim.screenHeight, dim.cornerRadius);
-
-  // 4. Create background
+  // 3. Create rich gradient background
   const backgroundBuffer = await createBackground(dim.width, dim.height, background);
 
-  // 5. Position device on background
-  const bezelWidth = 12;
-  const deviceWidth = dim.screenWidth + bezelWidth * 2;
-  const deviceHeight = dim.screenHeight + bezelWidth * 2;
-  const deviceX = Math.round((dim.width - deviceWidth) / 2);
+  // 4. Position device on background
+  const deviceX = Math.round((dim.width - device.totalWidth) / 2);
 
+  // Text area = space above (or below) the device
   let deviceY;
+  let textAreaHeight;
   if (!options.headline) {
-    deviceY = Math.round((dim.height - deviceHeight) / 2);
+    deviceY = Math.round((dim.height - device.totalHeight) / 2);
+    textAreaHeight = 0;
   } else if (textPosition === 'top') {
-    deviceY = 240;
+    // Give generous space for headline above device
+    textAreaHeight = Math.round(dim.height * 0.18);
+    deviceY = textAreaHeight - device.shadowPad;
+    // Let device extend slightly below canvas (bottom cropped) for modern look
   } else {
-    deviceY = 24;
+    // Device at top, text at bottom
+    deviceY = -device.shadowPad + 20;
+    textAreaHeight = dim.height - finalDeviceHeight - 40;
   }
 
-  // 6. Composite device onto background
+  // 5. Composite device onto background
   let finalBuffer = await sharp(backgroundBuffer)
-    .composite([{ input: deviceBuffer, top: deviceY, left: deviceX }])
+    .composite([{ input: device.buffer, top: deviceY, left: deviceX }])
     .png()
     .toBuffer();
 
-  // 7. Add bottom gradient for text readability if text at bottom
+  // 6. Add bottom gradient for text readability if text at bottom
   if (textPosition === 'bottom' && options.headline) {
     finalBuffer = await addBottomGradient(finalBuffer, dim.width, dim.height);
   }
 
-  // 8. Add text overlay
+  // 7. Add text overlay
   if (options.headline) {
     finalBuffer = await addTextOverlay(
       finalBuffer,
@@ -321,11 +359,12 @@ async function generateDisplayScreenshot(screenshotPath, options) {
       textPosition,
       textColor,
       dim.width,
-      dim.height
+      dim.height,
+      textAreaHeight
     );
   }
 
-  // 9. Save
+  // 8. Save
   const outputDir = path.dirname(options.outputPath);
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
@@ -338,17 +377,11 @@ async function generateDisplayScreenshot(screenshotPath, options) {
 
 /**
  * Generate display screenshots for all captured screens
- *
- * @param {Array<{size: string, name: string, path: string}>} rawScreenshots
- * @param {object} metadata - { appName, primaryColor, accentColor }
- * @param {string} outputDir - Base output directory
- * @param {object} [displayConfig] - Per-screen config from config file
- * @returns {Array<{name: string, path: string}>}
  */
 async function generateDisplayScreenshots(rawScreenshots, metadata, outputDir, displayConfig) {
   const results = [];
 
-  // De-duplicate screens (use first captured version)
+  // De-duplicate screens
   const uniqueScreens = [];
   const seenNames = new Set();
   for (const ss of rawScreenshots) {
@@ -358,7 +391,6 @@ async function generateDisplayScreenshots(rawScreenshots, metadata, outputDir, d
     }
   }
 
-  // Default headlines based on screen name
   const defaultHeadlines = {
     main: metadata.appName,
     detail: 'Discover more',
@@ -369,7 +401,6 @@ async function generateDisplayScreenshots(rawScreenshots, metadata, outputDir, d
   for (let i = 0; i < uniqueScreens.length; i++) {
     const screenshot = uniqueScreens[i];
 
-    // Get display config for this screen (from config file or defaults)
     const screenConfig = (displayConfig && displayConfig[screenshot.name]) || {};
 
     const headline = screenConfig.headline || defaultHeadlines[screenshot.name] || metadata.appName;
@@ -406,9 +437,8 @@ module.exports = {
   generateDisplayScreenshot,
   generateDisplayScreenshots,
   createBackground,
-  createDeviceFrame,
-  addDeviceBezel,
+  createDeviceMockup,
   addTextOverlay,
   DISPLAY_DIMENSIONS,
-  STYLE_PRESETS,
+  GRADIENT_PALETTES,
 };
